@@ -3,9 +3,11 @@ package io.github.config4k
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigException
 import com.typesafe.config.ConfigFactory
+import io.github.config4k.readers.MissingFieldsException
 import io.github.config4k.readers.SelectReader
 import java.io.File
 import java.nio.file.Path
+import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.primaryConstructor
 
@@ -32,19 +34,20 @@ inline fun <reified T> Config.extract(path: String): T {
     }
 }
 
+data class ExtractionResult<T>(val result: T, val missingParams: List<KParameter>)
+
 /**
  * Loads whole config into one data class.
  */
-inline fun <reified T> Config.extract(): T {
+inline fun <reified T> Config.extract(): ExtractionResult<T> {
     val genericType = object : TypeReference<T>() {}.genericType()
 
-    val result = SelectReader.extractWithoutPath(ClassContainer(T::class, genericType), this)
-
-    return try {
-        result as T
-    } catch (e: Exception) {
-        throw e
+    val (result: Any, missingParameters: List<KParameter>) = try{
+      Pair<Any, List<KParameter>>(SelectReader.extractWithoutPath(ClassContainer(T::class, genericType), this), listOf())
+    } catch (e: MissingFieldsException) {
+      Pair(e.readResult, e.missingFields)
     }
+    return ExtractionResult(result as T, missingParameters)
 }
 
 /**
